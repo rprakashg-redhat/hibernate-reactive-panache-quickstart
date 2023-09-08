@@ -1,0 +1,133 @@
+name: ci bad
+on:
+  workflow_dispatch:
+
+env:
+  IMAGE_TAGS: ${{ github.sha }}
+  IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  REGISTRY_USER: ${{ github.actor }}
+  REGISTRY_PASSWORD: ${{ github.token }}
+
+jobs:
+  build:
+    name: "build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: setup java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+      - name: build
+        run: ./mvnw clean install
+      - name: upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: quarkus-app
+          path: target/quarkus-app/
+
+  containerize:
+    name: "build container image"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: quarkus-app
+          path: target/quarkus-app/
+      - name: build image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: hibernate-reactive-panache-quickstart-unsecured
+          tags: ${{ env.IMAGE_TAGS }}
+          containerfiles: |
+            src/main/docker/Dockerfile.jvm
+      - name: push to registry
+        id: push-to-registry
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: eventscheduler-unsecured
+          tags: ${{ env.IMAGE_TAGS }}
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+          extra-args: |
+            --disable-content-trust
+    outputs:
+      digest: ${{ steps.push-to-registry.outputs.digest }}
+    needs: build
+
+  scan-image:
+    name: scan container image for vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: "Scan image"
+        uses: ./.github/actions/scan-image
+        with:
+          image: ${{ env.IMAGE_REGISTRY }}/hibernate-reactive-panache-quickstart-unsecured@${{ needs.containerize.outputs.digest }}
+          central-endpoint: ${{ secrets.ROX_CENTRAL_ENDPOINT }}
+          api-token: ${{ secrets.ROX_API_TOKEN }}
+    needs: containerize
+    continue-on-error: true
+
+  check-image:
+    name: check image
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: "Check image"
+      uses: ./.github/actions/check-image
+      with:
+        image: ${{ env.IMAGE_REGISTRY }}/hibernate-reactive-panache-quickstart-unsecured@${{ needs.containerize.outputs.digest }}
+        central-endpoint: ${{ secrets.ROX_CENTRAL_ENDPOINT }}
+        api-token: ${{ secrets.ROX_API_TOKEN }}
+    needs: containerize
+    continue-on-error: true
+
+  update-deployment-manifests:
+    name: update deployment artifacts
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        repository: rprakashg-redhat/hibernate-reactive-panache-quickstart-ops
+        ref: refs/heads/main
+        token: ${{ secrets.GH_TOKEN }}
+    - name: setup git
+      run: |
+        # Setting up the git config.
+        git config --global user.email "rgopinat@redhat.com" # HARD CODING FOR NOW, NEED TO DETERMINE HOW TO RETRIEVE THIS FROM CURRENT USER CONTEXT
+        git config --global user.name ${{ github.actor }}
+    - name: update manifest
+      run: |
+        IMAGE=\"${{ env.IMAGE_REGISTRY }}/hibernate-reactive-panache-quickstart-unsecured@${{ needs.containerize.outputs.digest }}\"
+        git checkout -b "${{ github.job }}-${{ github.sha }}"
+        sed -i "s#\(.*value:\s*\).*#\1 ${IMAGE}#" apps/service/overlays/dev/kustomization.yaml
+        cat apps/service/overlays/dev/kustomization.yaml
+
+        git add .
+        git commit -m "updated manifest to point to image tag $IMAGE"
+        git push origin "${{ github.job }}-${{ github.sha }}"        
+    needs: containerize
+
+  open-pr:
+    name: Open pull request
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: open pr
+      uses: ./.github/actions/open-pr
+      with:
+        repo: rprakashg-redhat/hibernate-reactive-panache-quickstart-ops
+        token: ${{ secrets.GH_TOKEN }}
+        title: "PR for commit - ${{ github.sha }}"
+        body: "PR for commit - ${{ github.sha }} by ${{ github.actor }}"
+        base: main
+        head: "update-deployment-manifests-${{ github.sha }}"
+    - uses: actions/checkout@v3
+    needs: update-deployment-manifests
