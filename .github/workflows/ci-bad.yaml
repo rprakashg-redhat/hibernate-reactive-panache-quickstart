@@ -50,7 +50,7 @@ jobs:
         id: push-to-registry
         uses: redhat-actions/push-to-registry@v2
         with:
-          image: eventscheduler-unsecured
+          image: hibernate-reactive-panache-quickstart-unsecured
           tags: ${{ env.IMAGE_TAGS }}
           registry: ${{ env.IMAGE_REGISTRY }}
           username: ${{ env.REGISTRY_USER }}

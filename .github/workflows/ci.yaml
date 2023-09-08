@@ -68,7 +68,7 @@ jobs:
         id: push-to-registry
         uses: redhat-actions/push-to-registry@v2
         with:
-          image: eventscheduler
+          image: hibernate-reactive-panache-quickstart
           tags: ${{ env.IMAGE_TAGS }}
           registry: ${{ env.IMAGE_REGISTRY }}
           username: ${{ env.REGISTRY_USER }}
