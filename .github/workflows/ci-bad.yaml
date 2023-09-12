@@ -107,7 +107,7 @@ jobs:
       run: |
         IMAGE=\"${{ env.IMAGE_REGISTRY }}/hibernate-reactive-panache-quickstart-unsecured@${{ needs.containerize.outputs.digest }}\"
         git checkout -b "${{ github.job }}-${{ github.sha }}"
-        sed -i "s#\(.*value:\s*\).*#\1 ${IMAGE}#" apps/service/overlays/dev/kustomization.yaml
+        sed -i "s#\(.*value:\s*\).*#\1 ${IMAGE}#" applications/hibernate-reactive-panache-quickstart/service/overlays/dev/kustomization.yaml
         cat apps/service/overlays/dev/kustomization.yaml
 
         git add .
