@@ -95,7 +95,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
       with:
-        repository: rprakashg-redhat/hibernate-reactive-panache-quickstart-ops
+        repository: rprakashg-redhat/rhacm-demos
         ref: refs/heads/main
         token: ${{ secrets.GH_TOKEN }}
     - name: setup git
@@ -108,7 +108,6 @@ jobs:
         IMAGE=\"${{ env.IMAGE_REGISTRY }}/hibernate-reactive-panache-quickstart-unsecured@${{ needs.containerize.outputs.digest }}\"
         git checkout -b "${{ github.job }}-${{ github.sha }}"
         sed -i "s#\(.*value:\s*\).*#\1 ${IMAGE}#" applications/hibernate-reactive-panache-quickstart/service/overlays/dev/kustomization.yaml
-        cat apps/service/overlays/dev/kustomization.yaml
 
         git add .
         git commit -m "updated manifest to point to image tag $IMAGE"
@@ -123,7 +122,7 @@ jobs:
     - name: open pr
       uses: ./.github/actions/open-pr
       with:
-        repo: rprakashg-redhat/hibernate-reactive-panache-quickstart-ops
+        repo: rprakashg-redhat/rhacm-demos
         token: ${{ secrets.GH_TOKEN }}
         title: "PR for commit - ${{ github.sha }}"
         body: "PR for commit - ${{ github.sha }} by ${{ github.actor }}"
